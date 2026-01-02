@@ -10,6 +10,7 @@
 #include <MD_MAX72xx.h>    // include MajicDesigns MAX72xx LED matrix library
 #include <SPI.h>           // include Arduino SPI library
 #include "clockFont.h"
+#include "smallFont.h"
 
 //----termo-------------------
 #include <OneWire.h>
@@ -58,14 +59,21 @@ bool set_hour_mode = false;
 bool set_minute_mode = false;
 
 int digi_blink_counter = 0;
+int A0Value = 0;
+
+const MD_MAX72XX::fontType_t* activeFont = sFont;
+
+uint16_t a0Buf[5] = {0, 0, 0, 0, 0};
+uint8_t  a0Index = 0;
+uint32_t a0Sum = 0;
+
 
 void setup(void) 
 {
-    
+    Serial.begin(9600);
     sensors.begin();
     // initialize the dot matrix display
     display.begin();
-    display.setFont(mfont);
      // set the intensity (brightness) of the display (choose a number between 0 and 15)
     brightnessValue = map(analogRead(A0), 0, 950, 0, 15);
     
@@ -79,7 +87,19 @@ void setup(void)
     screenUpdateTimer = millis();
     termoLoopTimeStamp = screenUpdateTimer + TERM_LOOP_DELAY;
     Rtc.Begin();
-    
+}
+
+uint16_t readA0Avg()
+{
+  a0Sum -= a0Buf[a0Index];          
+  a0Buf[a0Index] = analogRead(A0); 
+  a0Sum += a0Buf[a0Index];         
+
+  a0Index++;
+  if (a0Index >= 5)
+    a0Index = 0;
+
+  return a0Sum / 5;
 }
 
 //---------------------RENDER--------------------------
@@ -93,7 +113,7 @@ uint16_t fontOffset(char c)
 
   for (uint8_t i = 0; i < index; i++)
   {
-    uint8_t w = pgm_read_byte(&mfont[offset]);
+    uint8_t w = pgm_read_byte(&activeFont[offset]);
     offset += w + 1;
   }
 
@@ -103,11 +123,11 @@ uint16_t fontOffset(char c)
 uint8_t drawChar(uint8_t col, char c)
 {
   uint16_t off = fontOffset(c);
-  uint8_t w = pgm_read_byte(&mfont[off]);
+  uint8_t w = pgm_read_byte(&activeFont[off]);
 
   for (uint8_t i = 0; i < w; i++)
   {
-    uint8_t colData = pgm_read_byte(&mfont[off + 1 + i]);
+    uint8_t colData = pgm_read_byte(&activeFont[off + 1 + i]);
     uint8_t physCol = (MAX_DEVICES * 8 - 1) - (col + i);
     display.setColumn(physCol, colData);
   }
@@ -119,6 +139,8 @@ uint8_t drawChar(uint8_t col, char c)
 
 void drawText(const char* text, uint8_t startCol = 0)
 {
+  if (brightnessValue == 0)
+    startCol += 7;
   uint8_t col = startCol;
 
 
@@ -271,12 +293,25 @@ void loop(void)
         currentScreenUpdateTime = UPDATE_FAST;
     else
         currentScreenUpdateTime = UPDATE_SEC;
-
-    int currentBrightnessValue = map(analogRead(A0), 0, 950, 0, 15);
-    if (abs(currentBrightnessValue - brightnessValue) > 5)
+        
+    int currentA0Value = readA0Avg();
+    Serial.println(currentA0Value);
+    if (abs(currentA0Value - A0Value) > 50)
     {
-        brightnessValue = currentBrightnessValue;
-        display.control(MD_MAX72XX::INTENSITY, brightnessValue);
+        int newBrightnessValue = map(currentA0Value, 0, 950, 0, 16);
+        if (newBrightnessValue == 0 || brightnessValue == 0)
+        {
+          if (newBrightnessValue == 0)
+            activeFont = sFont; 
+          else
+            activeFont = mFont;   
+          display.clear();
+          screenUpdateTimer = 0;
+        }
+          
+        brightnessValue = newBrightnessValue;
+        A0Value = currentA0Value;
+        display.control(MD_MAX72XX::INTENSITY, constrain(brightnessValue - 1, 0, 15));
     }
     if (!digitalRead(SHOW_TERM_BUTTON))
     {

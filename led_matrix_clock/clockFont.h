@@ -1,6 +1,6 @@
 // Data file for user example user defined fonts
 #pragma once
-MD_MAX72XX::fontType_t mfont[] PROGMEM = 
+MD_MAX72XX::fontType_t mFont[] PROGMEM = 
 {
 	4, 0, 0, 0, 0,	// 32 space
 	4, 6, 9, 9, 6,	// 33   !  -> °
