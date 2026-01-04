@@ -87,6 +87,7 @@ void setup(void)
     screenUpdateTimer = millis();
     termoLoopTimeStamp = screenUpdateTimer + TERM_LOOP_DELAY;
     Rtc.Begin();
+    UpdateBrightness(readA0Avg());
 }
 
 uint16_t readA0Avg()
@@ -183,6 +184,27 @@ void inc_time(int min_change = 0, int hour_change = 0)
       00));
 }
 
+
+void UpdateBrightness(int currentA0Value)
+{
+  int newBrightnessValue = map(currentA0Value, 0, 950, 0, 16);
+  if (newBrightnessValue == 0 || brightnessValue == 0)
+  {
+    if (newBrightnessValue == 0)
+      activeFont = sFont; 
+    else
+      activeFont = mFont;   
+    display.clear();
+    screenUpdateTimer = 0;
+  }
+    
+  brightnessValue = newBrightnessValue;
+  A0Value = currentA0Value;
+  display.control(MD_MAX72XX::INTENSITY, constrain(brightnessValue - 1, 0, 15));
+}
+
+
+
 void updateTime(bool no_blink = false)
 {
     if (term_shown)
@@ -228,7 +250,6 @@ void updateTemp(void)
 
 void loop(void) 
 { 
-      
     double currentMillis = millis();
     if ((set_hour_mode || set_minute_mode) 
           && currentMillis - settingButtonPressTimeStamp > TERM_LOOP_DELAY)
@@ -295,23 +316,9 @@ void loop(void)
         currentScreenUpdateTime = UPDATE_SEC;
         
     int currentA0Value = readA0Avg();
-    Serial.println(currentA0Value);
     if (abs(currentA0Value - A0Value) > 50)
     {
-        int newBrightnessValue = map(currentA0Value, 0, 950, 0, 16);
-        if (newBrightnessValue == 0 || brightnessValue == 0)
-        {
-          if (newBrightnessValue == 0)
-            activeFont = sFont; 
-          else
-            activeFont = mFont;   
-          display.clear();
-          screenUpdateTimer = 0;
-        }
-          
-        brightnessValue = newBrightnessValue;
-        A0Value = currentA0Value;
-        display.control(MD_MAX72XX::INTENSITY, constrain(brightnessValue - 1, 0, 15));
+        UpdateBrightness(currentA0Value);
     }
     if (!digitalRead(SHOW_TERM_BUTTON))
     {
